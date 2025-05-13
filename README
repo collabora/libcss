@@ -47,6 +47,36 @@ Verification
 
       $ make test
 
+Meson
+-----
+
+This project can also be built with [meson](https://github.com/mesonbuild/meson)
+
+1. Install Python and meson
+`pip install meson`
+
+2. Set up meson build
+(optionally set install path, otherwise remove -prefix)
+(optionally enable tests)
+
+```
+export PREFIX=PATH/TO/INSTALL/DIRECTORY
+meson setup builddir --prefix=$PREFIX -Dtests=true
+```
+
+3. Compile and optionally run tests
+
+```
+meson compile  -C builddir -v
+meson test -C builddir -v
+```
+
+4. Install
+
+`meson install -C builddir`
+
+
+
 API documentation
 -----------------
 
