@@ -8,6 +8,10 @@
 #ifndef css_stylesheet_h_
 #define css_stylesheet_h_
 
+#ifndef _ALIGNED
+#define _ALIGNED __attribute__((aligned(8)))
+#endif
+
 #include <inttypes.h>
 #include <stdio.h>
 
