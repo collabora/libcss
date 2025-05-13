@@ -14,46 +14,46 @@
 
 /** \todo at some point, we need to extend this to handle nested blocks */
 typedef struct exp_entry {
-	int type;
+    int type;
 #define MAX_RULE_NAME_LEN (128)
-	char name[MAX_RULE_NAME_LEN];
-	size_t bclen;
-	size_t bcused;
-	uint8_t *bytecode;
+    char name[MAX_RULE_NAME_LEN];
+    size_t bclen;
+    size_t bcused;
+    uint8_t *bytecode;
 
-	size_t stlen;
-	size_t stused;
-	struct stentry {
-		size_t off;
-		char *string;
-	} *stringtab;
+    size_t stlen;
+    size_t stused;
+    struct stentry {
+        size_t off;
+        char *string;
+    } *stringtab;
 } exp_entry;
 
 typedef struct line_ctx {
-	size_t buflen;
-	size_t bufused;
-	uint8_t *buf;
+    size_t buflen;
+    size_t bufused;
+    uint8_t *buf;
 
-	size_t explen;
-	size_t expused;
-	exp_entry *exp;
+    size_t explen;
+    size_t expused;
+    exp_entry *exp;
 
-	bool indata;
-	bool inerrors;
-	bool inexp;
+    bool indata;
+    bool inerrors;
+    bool inexp;
 
-	bool inrule;
+    bool inrule;
 } line_ctx;
 
 static bool handle_line(const char *data, size_t datalen, void *pw);
 static void css__parse_expected(line_ctx *ctx, const char *data, size_t len);
 static void run_test(const uint8_t *data, size_t len,
-		exp_entry *exp, size_t explen);
+        exp_entry *exp, size_t explen);
 static bool validate_rule_selector(css_rule_selector *s, exp_entry *e);
 static void validate_rule_charset(css_rule_charset *s, exp_entry *e,
-		int testnum);
+        int testnum);
 static void validate_rule_import(css_rule_import *s, exp_entry *e,
-		int testnum);
+        int testnum);
 
 static void dump_selector_list(css_selector *list, char **ptr);
 static void dump_selector(css_selector *selector, char **ptr);
@@ -61,15 +61,15 @@ static void dump_selector_detail(css_selector_detail *detail, char **ptr);
 static void dump_string(lwc_string *string, char **ptr);
 
 static css_error resolve_url(void *pw,
-		const char *base, lwc_string *rel, lwc_string **abs)
+        const char *base, lwc_string *rel, lwc_string **abs)
 {
-	UNUSED(pw);
-	UNUSED(base);
+    UNUSED(pw);
+    UNUSED(base);
 
-	/* About as useless as possible */
-	*abs = lwc_string_ref(rel);
+    /* About as useless as possible */
+    *abs = lwc_string_ref(rel);
 
-	return CSS_OK;
+    return CSS_OK;
 }
 
 static bool fail_because_lwc_leaked = false;
@@ -77,475 +77,546 @@ static bool fail_because_lwc_leaked = false;
 static void
 printing_lwc_iterator(lwc_string *str, void *pw)
 {
-	UNUSED(pw);
+    UNUSED(pw);
 
-	printf(" DICT: %*s\n", (int)(lwc_string_length(str)), lwc_string_data(str));
-	fail_because_lwc_leaked = true;
+    printf(" DICT: %*s\n", (int)(lwc_string_length(str)), lwc_string_data(str));
+    fail_because_lwc_leaked = true;
 }
 
 static void destroy_expected(line_ctx *ctx)
 {
-	while (ctx->expused > 0) {
-		exp_entry *victim = &ctx->exp[--ctx->expused];
+    while (ctx->expused > 0) {
+        exp_entry *victim = &ctx->exp[--ctx->expused];
 
-		if (victim->bytecode != NULL)
-			free(victim->bytecode);
+        if (victim->bytecode != NULL)
+            free(victim->bytecode);
 
-		while (victim->stused > 0) {
-			free(victim->stringtab[--victim->stused].string);
-		}
+        while (victim->stused > 0) {
+            free(victim->stringtab[--victim->stused].string);
+        }
 
-		free(victim->stringtab);
-	}
+        free(victim->stringtab);
+    }
 }
 
 int main(int argc, char **argv)
 {
-	line_ctx ctx;
+    line_ctx ctx;
 
-	if (argc != 2) {
-		printf("Usage: %s <filename>\n", argv[0]);
-		return 1;
-	}
+    if (argc != 2) {
+        printf("Usage: %s <filename>\n", argv[0]);
+        return 1;
+    }
 
-	ctx.buflen = css__parse_filesize(argv[1]);
-	if (ctx.buflen == 0)
-		return 1;
+    printf("DEBUG: Loading test file: %s\n", argv[1]);
 
-	ctx.buf = malloc(ctx.buflen);
-	if (ctx.buf == NULL) {
-		printf("Failed allocating %u bytes\n",
-				(unsigned int) ctx.buflen);
-		return 1;
-	}
+    ctx.buflen = css__get_file_size(argv[1]);
+    if (ctx.buflen == 0) {
+        printf("ERROR: Failed to get file size for %s\n", argv[1]);
+        return 1;
+    }
 
-	ctx.buf[0] = '\0';
-	ctx.bufused = 0;
-	ctx.explen = 0;
-	ctx.expused = 0;
-	ctx.exp = NULL;
-	ctx.indata = false;
-	ctx.inerrors = false;
-	ctx.inexp = false;
+    ctx.buf = malloc(ctx.buflen);
+    if (ctx.buf == NULL) {
+        printf("ERROR: Failed allocating %u bytes\n",
+                (unsigned int) ctx.buflen);
+        return 1;
+    }
 
-	assert(css__parse_testfile(argv[1], handle_line, &ctx) == true);
+    ctx.buf[0] = '\0';
+    ctx.bufused = 0;
+    ctx.explen = 0;
+    ctx.expused = 0;
+    ctx.exp = NULL;
+    ctx.indata = false;
+    ctx.inerrors = false;
+    ctx.inexp = false;
 
-	/* and run final test */
-	if (ctx.bufused > 0)
-		run_test(ctx.buf, ctx.bufused, ctx.exp, ctx.expused);
+    printf("DEBUG: Parsing test file with size %zu bytes\n", ctx.buflen);
+    bool parse_result = css__parse_testfile(argv[1], handle_line, &ctx);
+    if (!parse_result) {
+        printf("ERROR: Failed to parse test file %s\n", argv[1]);
+        free(ctx.buf);
+        return 1;
+    }
 
-	free(ctx.buf);
+    /* and run final test */
+    if (ctx.bufused > 0) {
+        printf("DEBUG: Running final test case\n");
+        run_test(ctx.buf, ctx.bufused, ctx.exp, ctx.expused);
+    } else {
+        printf("DEBUG: No final test case to run\n");
+    }
 
-	destroy_expected(&ctx);
-	free(ctx.exp);
+    free(ctx.buf);
 
-	lwc_iterate_strings(printing_lwc_iterator, NULL);
+    destroy_expected(&ctx);
+    free(ctx.exp);
 
-	assert(fail_because_lwc_leaked == false);
+    lwc_iterate_strings(printing_lwc_iterator, NULL);
 
-	printf("PASS\n");
+    assert(fail_because_lwc_leaked == false);
 
-	return 0;
+    printf("PASS\n");
+
+    return 0;
 }
 
 bool handle_line(const char *data, size_t datalen, void *pw)
 {
-	line_ctx *ctx = (line_ctx *) pw;
+    line_ctx *ctx = (line_ctx *) pw;
 
-	if (data[0] == '#') {
-		if (ctx->inexp) {
-			/* This marks end of testcase, so run it */
+    printf("DEBUG: Processing line: '%.*s' (len=%zu)\n", (int) datalen, data, datalen);
 
-			run_test(ctx->buf, ctx->bufused,
-					ctx->exp, ctx->expused);
+    if (data[0] == '#') {
+        printf("DEBUG: Comment line detected\n");
+        if (ctx->inexp) {
+            /* This marks end of testcase, so run it */
+            printf("DEBUG: End of test case, running test\n");
+            run_test(ctx->buf, ctx->bufused,
+                    ctx->exp, ctx->expused);
 
-			ctx->buf[0] = '\0';
-			ctx->bufused = 0;
+            ctx->buf[0] = '\0';
+            ctx->bufused = 0;
 
-			destroy_expected(ctx);
-		}
+            destroy_expected(ctx);
+        }
 
-		if (ctx->indata && strncasecmp(data+1, "errors", 6) == 0) {
-			ctx->indata = false;
-			ctx->inerrors = true;
-			ctx->inexp = false;
-		} else if (ctx->inerrors &&
-				strncasecmp(data+1, "expected", 8) == 0) {
-			ctx->indata = false;
-			ctx->inerrors = false;
-			ctx->inexp = true;
-			ctx->inrule = false;
-		} else if (ctx->inexp && strncasecmp(data+1, "data", 4) == 0) {
-			ctx->indata = true;
-			ctx->inerrors = false;
-			ctx->inexp = false;
-		} else if (ctx->indata) {
-			memcpy(ctx->buf + ctx->bufused, data, datalen);
-			ctx->bufused += datalen;
-		} else {
-			ctx->indata = (strncasecmp(data+1, "data", 4) == 0);
-			ctx->inerrors = (strncasecmp(data+1, "errors", 6) == 0);
-			ctx->inexp = (strncasecmp(data+1, "expected", 8) == 0);
-		}
-	} else {
-		if (ctx->indata) {
-			memcpy(ctx->buf + ctx->bufused, data, datalen);
-			ctx->bufused += datalen;
-		}
-		if (ctx->inexp) {
-			if (data[datalen - 1] == '\n')
-				datalen -= 1;
+        if (ctx->indata && strncasecmp(data+1, "errors", 6) == 0) {
+            printf("DEBUG: Switching from data to errors\n");
+            ctx->indata = false;
+            ctx->inerrors = true;
+            ctx->inexp = false;
+        } else if (ctx->inerrors &&
+                strncasecmp(data+1, "expected", 8) == 0) {
+            printf("DEBUG: Switching from errors to expected\n");
+            ctx->indata = false;
+            ctx->inerrors = false;
+            ctx->inexp = true;
+            ctx->inrule = false;
+        } else if (ctx->inexp && strncasecmp(data+1, "data", 4) == 0) {
+            printf("DEBUG: Switching from expected to data\n");
+            ctx->indata = true;
+            ctx->inerrors = false;
+            ctx->inexp = false;
+        } else if (ctx->indata) {
+            printf("DEBUG: Appending comment to data buffer\n");
+            memcpy(ctx->buf + ctx->bufused, data, datalen);
+            ctx->bufused += datalen;
+        } else {
+            ctx->indata = (strncasecmp(data+1, "data", 4) == 0);
+            ctx->inerrors = (strncasecmp(data+1, "errors", 6) == 0);
+            ctx->inexp = (strncasecmp(data+1, "expected", 8) == 0);
+            printf("DEBUG: Setting indata=%d, inerrors=%d, inexp=%d\n",
+                   ctx->indata, ctx->inerrors, ctx->inexp);
+        }
+    } else {
+        if (ctx->indata) {
+            printf("DEBUG: Appending %zu bytes to data buffer\n", datalen);
+            memcpy(ctx->buf + ctx->bufused, data, datalen);
+            ctx->bufused += datalen;
+        }
+        if (ctx->inexp) {
+            if (data[datalen - 1] == '\n')
+                datalen -= 1;
+            printf("DEBUG: Parsing expected: '%.*s' (len=%zu)\n",
+                   (int) datalen, data, datalen);
+            css__parse_expected(ctx, data, datalen);
+        }
+    }
 
-			css__parse_expected(ctx, data, datalen);
-		}
-	}
-
-	return true;
+    return true;
 }
 
 void css__parse_expected(line_ctx *ctx, const char *data, size_t len)
 {
-	/* Ignore blanks or lines that don't start with | */
-	if (len == 0 || data[0] != '|')
-		return;
+    /* Ignore blanks or lines that don't start with | */
+    if (len == 0 || data[0] != '|')
+        return;
 
-	if (ctx->inrule == false) {
-		char *name;
-		int type;
+    if (ctx->inrule == false) {
+        char *name;
+        int type;
 
 start_rule:
-		type = strtol(data + 1, &name, 10);
+        printf("DEBUG: Parsing new rule: '%.*s'\n", (int) len, data);
+        type = strtol(data + 1, &name, 10);
 
-		while (isspace(*name))
-			name++;
+        while (isspace(*name))
+            name++;
 
-		/* Append to list of expected rules */
-		if (ctx->expused == ctx->explen) {
-			size_t num = ctx->explen == 0 ? 4 : ctx->explen;
+        /* Append to list of expected rules */
+        if (ctx->expused == ctx->explen) {
+            size_t num = ctx->explen == 0 ? 4 : ctx->explen;
 
-			exp_entry *temp = realloc(ctx->exp,
-					num * 2 * sizeof(exp_entry));
-			if (temp == NULL) {
-				assert(0 && "No memory for expected rules");
-			}
+            exp_entry *temp = realloc(ctx->exp,
+                    num * 2 * sizeof(exp_entry));
+            if (temp == NULL) {
+                printf("ERROR: No memory for expected rules\n");
+                assert(0 && "No memory for expected rules");
+            }
 
-			ctx->exp = temp;
-			ctx->explen = num * 2;
-		}
+            ctx->exp = temp;
+            ctx->explen = num * 2;
+        }
 
-		ctx->exp[ctx->expused].type = type;
-		memcpy(ctx->exp[ctx->expused].name, name,
-				min(len - (name - data), MAX_RULE_NAME_LEN));
-		ctx->exp[ctx->expused].name[min(len - (name - data),
-				MAX_RULE_NAME_LEN - 1)] = '\0';
-		ctx->exp[ctx->expused].bclen = 0;
-		ctx->exp[ctx->expused].bcused = 0;
-		ctx->exp[ctx->expused].bytecode = NULL;
-		ctx->exp[ctx->expused].stlen = 0;
-		ctx->exp[ctx->expused].stused = 0;
-		ctx->exp[ctx->expused].stringtab =  NULL;
+        ctx->exp[ctx->expused].type = type;
+        memcpy(ctx->exp[ctx->expused].name, name,
+                min(len - (name - data), MAX_RULE_NAME_LEN));
+        ctx->exp[ctx->expused].name[min(len - (name - data),
+                MAX_RULE_NAME_LEN - 1)] = '\0';
+        ctx->exp[ctx->expused].bclen = 0;
+        ctx->exp[ctx->expused].bcused = 0;
+        ctx->exp[ctx->expused].bytecode = NULL;
+        ctx->exp[ctx->expused].stlen = 0;
+        ctx->exp[ctx->expused].stused = 0;
+        ctx->exp[ctx->expused].stringtab = NULL;
 
-		ctx->expused++;
+        printf("DEBUG: Added rule type=%d, name='%s'\n",
+               type, ctx->exp[ctx->expused].name);
 
-		ctx->inrule = true;
-	} else {
-		char *next = (char *) data + 1;
-		exp_entry *rule = &ctx->exp[ctx->expused - 1];
+        ctx->expused++;
 
-		if (data[2] != ' ') {
-			ctx->inrule = false;
-			goto start_rule;
-		}
+        ctx->inrule = true;
+    } else {
+        char *next = (char *) data + 1;
+        exp_entry *rule = &ctx->exp[ctx->expused - 1];
 
-		while (next < data + len) {
-			/* Skip whitespace */
-			while (next < data + len && isspace(*next))
-				next++;
+        printf("DEBUG: Parsing rule bytecode: '%.*s'\n", (int) len, data);
 
-			if (next == data + len)
-				break;
+        if (data[2] != ' ') {
+            printf("DEBUG: End of rule, starting new rule\n");
+            ctx->inrule = false;
+            goto start_rule;
+        }
 
-			if (rule->bcused >= rule->bclen) {
-				size_t num = rule->bcused == 0 ? 4 :
-						rule->bcused;
+        while (next < data + len) {
+            /* Skip whitespace */
+            while (next < data + len && isspace(*next))
+                next++;
 
-				uint8_t *temp = realloc(rule->bytecode,
-						num * 2);
-				if (temp == NULL) {
-					assert(0 && "No memory for bytecode");
-				}
+            if (next == data + len)
+                break;
 
-				rule->bytecode = temp;
-				rule->bclen = num * 2;
-			}
+            if (rule->bcused >= rule->bclen) {
+                size_t num = rule->bcused == 0 ? 4 :
+                        rule->bcused;
 
-			if (*next == 'P') {
-				/* Pointer */
-				const char *str;
+                uint8_t *temp = realloc(rule->bytecode,
+                        num * 2);
+                if (temp == NULL) {
+                    printf("ERROR: No memory for bytecode\n");
+                    assert(0 && "No memory for bytecode");
+                }
 
-				while (next < data + len && *next != '(')
-					next++;
-				str = next + 1;
-				while (next < data + len && *next != ')')
-					next++;
-				next++;
+                rule->bytecode = temp;
+                rule->bclen = num * 2;
+            }
 
-				if (rule->stused >= rule->stlen) {
-					size_t num = rule->stused == 0 ? 4 :
-							rule->stused;
+            if (*next == 'P') {
+                /* Pointer */
+                const char *str;
 
-					struct stentry *temp = realloc(
-						rule->stringtab,
-						num * 2 * sizeof(struct stentry));
-					if (temp == NULL) {
-						assert(0 &&
-						"No memory for string table");
-					}
+                while (next < data + len && *next != '(')
+                    next++;
+                str = next + 1;
+                while (next < data + len && *next != ')')
+                    next++;
+                next++;
 
-					rule->stringtab = temp;
-					rule->stlen = num * 2;
-				}
+                if (rule->stused >= rule->stlen) {
+                    size_t num = rule->stused == 0 ? 4 :
+                            rule->stused;
 
-				rule->stringtab[rule->stused].off =
-						rule->bcused;
-				rule->stringtab[rule->stused].string =
-						malloc(next - str);
-				assert(rule->stringtab[rule->stused].string !=
-						NULL);
-				memcpy(rule->stringtab[rule->stused].string,
-						str, next - str - 1);
-				rule->stringtab[rule->stused].string[
-						next - str - 1]	 = '\0';
+                    struct stentry *temp = realloc(
+                        rule->stringtab,
+                        num * 2 * sizeof(struct stentry));
+                    if (temp == NULL) {
+                        printf("ERROR: No memory for string table\n");
+                        assert(0 && "No memory for string table");
+                    }
 
-				rule->bcused += sizeof(css_code_t);
-				rule->stused++;
-			} else {
-				/* Assume hexnum */
-				uint32_t val = strtoul(next, &next, 16);
+                    rule->stringtab = temp;
+                    rule->stlen = num * 2;
+                }
 
-				/* Append to bytecode */
-				memcpy(rule->bytecode + rule->bcused,
-						&val, sizeof(val));
-				rule->bcused += sizeof(val);
-			}
-		}
-	}
+                rule->stringtab[rule->stused].off =
+                        rule->bcused;
+                rule->stringtab[rule->stused].string =
+                        malloc(next - str);
+                assert(rule->stringtab[rule->stused].string !=
+                        NULL);
+                memcpy(rule->stringtab[rule->stused].string,
+                        str, next - str - 1);
+                rule->stringtab[rule->stused].string[
+                        next - str - 1] = '\0';
+
+                printf("DEBUG: Added string to table: '%s' at offset %zu\n",
+                       rule->stringtab[rule->stused].string,
+                       rule->bcused);
+
+                rule->bcused += sizeof(css_code_t);
+                rule->stused++;
+            } else {
+                /* Assume hexnum */
+                uint32_t val = strtoul(next, &next, 16);
+
+                /* Append to bytecode */
+                memcpy(rule->bytecode + rule->bcused,
+                        &val, sizeof(val));
+                rule->bcused += sizeof(val);
+
+                printf("DEBUG: Added bytecode value: 0x%x\n", val);
+            }
+        }
+    }
 }
 
 static void report_fail(const uint8_t *data, size_t datalen, exp_entry *e)
 {
-	uint32_t bcoff;
+    uint32_t bcoff;
 
-	printf("    Data: %.*s\n", (int)datalen, data);
+    printf("    Data: %.*s\n", (int)datalen, data);
 
-	printf("    Expected entry:\n");
-	printf("	entry type:%d name:%s\n", e->type, e->name);
-	printf("	bytecode len:%" PRIuMAX " used:%" PRIuMAX "\n",
-		(uintmax_t) e->bclen, (uintmax_t) e->bcused);
-	printf("	bytecode ");
-	for (bcoff = 0; bcoff < e->bcused; bcoff++) {
-		printf("%.2x ", ((uint8_t *) e->bytecode)[bcoff]);
-	}
-	printf("\n	  string table len:%" PRIuMAX " used %" PRIuMAX "\n",
-		(uintmax_t) e->stlen, (uintmax_t) e->stused);
-/*
-	struct stentry {
-		size_t off;
-		char *string;
-	} *stringtab;
-*/
+    printf("    Expected entry:\n");
+    printf("    entry type:%d name:%s\n", e->type, e->name);
+    printf("    bytecode len:%" PRIuMAX " used:%" PRIuMAX "\n",
+            (uintmax_t) e->bclen, (uintmax_t) e->bcused);
+    printf("    bytecode ");
+    for (bcoff = 0; bcoff < e->bcused; bcoff++) {
+        printf("%.2x ", ((uint8_t *) e->bytecode)[bcoff]);
+    }
+    printf("\n    string table len:%" PRIuMAX " used %" PRIuMAX "\n",
+            (uintmax_t) e->stlen, (uintmax_t) e->stused);
+    for (size_t i = 0; i < e->stused; i++) {
+        printf("    string[%zu]: off=%zu, value='%s'\n",
+               i, e->stringtab[i].off, e->stringtab[i].string);
+    }
 }
 
 void run_test(const uint8_t *data, size_t len, exp_entry *exp, size_t explen)
 {
-	css_stylesheet_params params;
-	css_stylesheet *sheet;
-	css_rule *rule;
-	css_error error;
-	size_t e;
-	static int testnum;
-	bool failed;
+    css_stylesheet_params params;
+    css_stylesheet *sheet;
+    css_rule *rule;
+    css_error error;
+    size_t e;
+    static int testnum;
+    bool failed;
 
-	params.params_version = CSS_STYLESHEET_PARAMS_VERSION_1;
-	params.level = CSS_LEVEL_21;
-	params.charset = "UTF-8";
-	params.url = "foo";
-	params.title = NULL;
-	params.allow_quirks = false;
-	params.inline_style = false;
-	params.resolve = resolve_url;
-	params.resolve_pw = NULL;
-	params.import = NULL;
-	params.import_pw = NULL;
-	params.color = NULL;
-	params.color_pw = NULL;
-	params.font = NULL;
-	params.font_pw = NULL;
+    printf("DEBUG: Running test with input data (%zu bytes): '%.*s'\n",
+           len, (int) len, data);
+    printf("DEBUG: Expected %zu rules\n", explen);
+    for (size_t i = 0; i < explen; i++) {
+        printf("DEBUG: Expected rule %zu: type=%d, name='%s'\n",
+               i, exp[i].type, exp[i].name);
+    }
 
-	assert(css_stylesheet_create(&params, &sheet) == CSS_OK);
+    params.params_version = CSS_STYLESHEET_PARAMS_VERSION_1;
+    params.level = CSS_LEVEL_21;
+    params.charset = "UTF-8";
+    params.url = "foo";
+    params.title = NULL;
+    params.allow_quirks = false;
+    params.inline_style = false;
+    params.resolve = resolve_url;
+    params.resolve_pw = NULL;
+    params.import = NULL;
+    params.import_pw = NULL;
+    params.color = NULL;
+    params.color_pw = NULL;
+    params.font = NULL;
+    params.font_pw = NULL;
 
-	error = css_stylesheet_append_data(sheet, data, len);
-	if (error != CSS_OK && error != CSS_NEEDDATA) {
-		printf("Failed appending data: %d\n", error);
-		assert(0);
-	}
+    error = css_stylesheet_create(&params, &sheet);
+    if (error != CSS_OK) {
+        printf("ERROR: css_stylesheet_create failed with error %d\n", error);
+        assert(0 && "Failed to create stylesheet");
+    }
 
-	error = css_stylesheet_data_done(sheet);
-	assert(error == CSS_OK || error == CSS_IMPORTS_PENDING);
+    printf("DEBUG: Appending %zu bytes of data\n", len);
+    error = css_stylesheet_append_data(sheet, data, len);
+    if (error != CSS_OK && error != CSS_NEEDDATA) {
+        printf("ERROR: Failed appending data: %d\n", error);
+        assert(0);
+    }
 
-	while (error == CSS_IMPORTS_PENDING) {
-		lwc_string *url;
+    printf("DEBUG: Finalizing stylesheet data\n");
+    error = css_stylesheet_data_done(sheet);
+    if (error != CSS_OK && error != CSS_IMPORTS_PENDING) {
+        printf("ERROR: css_stylesheet_data_done failed with error %d\n", error);
+        assert(0);
+    }
 
-		error = css_stylesheet_next_pending_import(sheet, &url);
-		assert(error == CSS_OK || error == CSS_INVALID);
+    while (error == CSS_IMPORTS_PENDING) {
+        lwc_string *url;
 
-		if (error == CSS_OK) {
-			css_stylesheet *import;
-			char *buf = malloc(lwc_string_length(url) + 1);
+        error = css_stylesheet_next_pending_import(sheet, &url);
+        if (error != CSS_OK && error != CSS_INVALID) {
+            printf("ERROR: css_stylesheet_next_pending_import failed with error %d\n", error);
+            assert(0);
+        }
 
-			memcpy(buf, lwc_string_data(url),
-					lwc_string_length(url));
-			buf[lwc_string_length(url)] = '\0';
+        if (error == CSS_OK) {
+            css_stylesheet *import;
+            char *buf = malloc(lwc_string_length(url) + 1);
 
-			params.url = buf;
+            memcpy(buf, lwc_string_data(url),
+                    lwc_string_length(url));
+            buf[lwc_string_length(url)] = '\0';
 
-			assert(css_stylesheet_create(&params,
-					&import) == CSS_OK);
+            params.url = buf;
 
-			assert(css_stylesheet_register_import(sheet,
-				import) == CSS_OK);
+            error = css_stylesheet_create(&params, &import);
+            if (error != CSS_OK) {
+                printf("ERROR: css_stylesheet_create for import failed with error %d\n", error);
+                assert(0);
+            }
 
-			error = CSS_IMPORTS_PENDING;
-			lwc_string_unref(url);
+            error = css_stylesheet_register_import(sheet, import);
+            if (error != CSS_OK) {
+                printf("ERROR: css_stylesheet_register_import failed with error %d\n", error);
+                assert(0);
+            }
 
-			free(buf);
-		}
-	}
+            error = CSS_IMPORTS_PENDING;
+            lwc_string_unref(url);
 
-	e = 0;
-	testnum++;
+            free(buf);
+        }
+    }
 
-	printf("Test %d: ", testnum);
+    e = 0;
+    testnum++;
 
-	if (sheet->rule_count != explen) {
-		printf("%d: Got %d rules. Expected %u\n",
-				testnum, sheet->rule_count, (int) explen);
-		assert(0 && "Unexpected number of rules");
-	}
+    printf("Test %d: ", testnum);
 
-	for (rule = sheet->rule_list; rule != NULL; rule = rule->next, e++) {
-		if (rule->type != exp[e].type) {
-			printf("%d: Got type %d. Expected %d\n",
-				testnum, rule->type, exp[e].type);
-			assert(0 && "Types differ");
-		}
+    if (sheet->rule_count != explen) {
+        printf("%d: Got %d rules. Expected %u\n",
+                testnum, sheet->rule_count, (int) explen);
+        assert(0 && "Unexpected number of rules");
+    }
 
-		switch (rule->type) {
-		case CSS_RULE_SELECTOR:
-			failed = validate_rule_selector((css_rule_selector *) rule, &exp[e]);
-			break;
-		case CSS_RULE_CHARSET:
-			validate_rule_charset((css_rule_charset *) rule,
-					&exp[e], testnum);
-			failed = false;
-			break;
-		case CSS_RULE_IMPORT:
-			validate_rule_import((css_rule_import *) rule,
-					&exp[e], testnum);
-			failed = false;
-			break;
-		default:
-			printf("%d: Unhandled rule type %d\n",
-				testnum, rule->type);
-			failed = false;
-			break;
-		}
+    for (rule = sheet->rule_list; rule != NULL; rule = rule->next, e++) {
+        printf("DEBUG: Validating rule %zu: type=%d\n", e, rule->type);
+        if (rule->type != exp[e].type) {
+            printf("%d: Got type %d. Expected %d\n",
+                   testnum, rule->type, exp[e].type);
+            assert(0 && "Types differ");
+        }
 
-		if (failed) {
-			report_fail(data, len, &exp[e]);
-			assert(0);
-		}
-	}
+        switch (rule->type) {
+        case CSS_RULE_SELECTOR:
+            failed = validate_rule_selector((css_rule_selector *) rule, &exp[e]);
+            break;
+        case CSS_RULE_CHARSET:
+            validate_rule_charset((css_rule_charset *) rule,
+                    &exp[e], testnum);
+            failed = false;
+            break;
+        case CSS_RULE_IMPORT:
+            validate_rule_import((css_rule_import *) rule,
+                    &exp[e], testnum);
+            failed = false;
+            break;
+        default:
+            printf("%d: Unhandled rule type %d\n",
+                   testnum, rule->type);
+            failed = false;
+            break;
+        }
 
-	assert(e == explen);
+        if (failed) {
+            printf("ERROR: Validation failed for rule %zu\n", e);
+            report_fail(data, len, &exp[e]);
+            assert(0);
+        }
+    }
 
-	css_stylesheet_destroy(sheet);
+    if (e != explen) {
+        printf("ERROR: Rule count mismatch: processed %zu, expected %zu\n",
+               e, explen);
+        assert(0);
+    }
 
-	printf("PASS\n");
+    css_stylesheet_destroy(sheet);
+
+    printf("PASS\n");
 }
-
 
 bool validate_rule_selector(css_rule_selector *s, exp_entry *e)
 {
-	char name[MAX_RULE_NAME_LEN];
-	char *ptr = name;
-	uint32_t i;
+    char name[MAX_RULE_NAME_LEN];
+    char *ptr = name;
+    uint32_t i;
 
-	/* Build selector string */
-	for (i = 0; i < s->base.items; i++) {
-		dump_selector_list(s->selectors[i], &ptr);
-		if (i != (uint32_t) (s->base.items - 1)) {
-			memcpy(ptr, ", ", 2);
-			ptr += 2;
-		}
-	}
-	*ptr = '\0';
+    /* Build selector string */
+    printf("DEBUG: Building selector string for rule\n");
+    for (i = 0; i < s->base.items; i++) {
+        dump_selector_list(s->selectors[i], &ptr);
+        if (i != (uint32_t) (s->base.items - 1)) {
+            memcpy(ptr, ", ", 2);
+            ptr += 2;
+        }
+    }
+    *ptr = '\0';
 
-	/* Compare with expected selector */
-	if (strcmp(e->name, name) != 0) {
-		printf("FAIL Mismatched names\n"
-		       "     Got name '%s'. Expected '%s'\n",
-		       name, e->name);
-		return true;
-	}
+    /* Compare with expected selector */
+    printf("DEBUG: Comparing selector: got='%s', expected='%s'\n", name, e->name);
+    if (strcmp(e->name, name) != 0) {
+        printf("FAIL Mismatched names\n"
+               "     Got name '%s'. Expected '%s'\n",
+               name, e->name);
+        return true;
+    }
 
-	/* Now compare bytecode */
-	if (e->bytecode != NULL && s->style == NULL) {
-		printf("FAIL No bytecode\n"
-		       "    Expected bytecode but none created\n");
-		return true;
-	} else if (e->bytecode == NULL && s->style != NULL) {
-		printf("FAIL Unexpected bytecode\n"
-		       "    No bytecode expected but some created\n");
-		return true;
-	} else if (e->bytecode != NULL && s->style != NULL) {
-		size_t i;
+    /* Now compare bytecode */
+    if (e->bytecode != NULL && s->style == NULL) {
+        printf("FAIL No bytecode\n"
+               "    Expected bytecode but none created\n");
+        return true;
+    } else if (e->bytecode == NULL && s->style != NULL) {
+        printf("FAIL Unexpected bytecode\n"
+               "    No bytecode expected but some created\n");
+        return true;
+    } else if (e->bytecode != NULL && s->style != NULL) {
+        size_t i;
 
-		if ((s->style->used * sizeof(css_code_t)) != e->bcused) {
-			printf("FAIL Bytecode lengths differ\n"
-			       "    Got length %" PRIuMAX ", Expected %" PRIuMAX "\n",
-				(uintmax_t) (s->style->used * sizeof(css_code_t)),
-				(uintmax_t) e->bcused);
-			return true;
-		}
+        if ((s->style->used * sizeof(css_code_t)) != e->bcused) {
+            printf("FAIL Bytecode lengths differ\n"
+                   "    Got length %" PRIuMAX ", Expected %" PRIuMAX "\n",
+                   (uintmax_t) (s->style->used * sizeof(css_code_t)),
+                   (uintmax_t) e->bcused);
+            return true;
+        }
 
-		for (i = 0; i < e->bcused; i++) {
-			size_t j;
+        for (i = 0; i < e->bcused; i++) {
+            size_t j;
 
-			for (j = 0; j < e->stused; j++) {
-				if (e->stringtab[j].off == i)
-					break;
-			}
+            for (j = 0; j < e->stused; j++) {
+                if (e->stringtab[j].off == i)
+                    break;
+            }
 
-			if (j != e->stused) {
-				/* String */
-				lwc_string *p;
+            if (j != e->stused) {
+                /* String */
+                lwc_string *p;
 
-				css__stylesheet_string_get(s->style->sheet, (s->style->bytecode[i / sizeof(css_code_t)]), &p);
+                css__stylesheet_string_get(s->style->sheet, (s->style->bytecode[i / sizeof(css_code_t)]), &p);
 
-				if (lwc_string_length(p) !=
-					strlen(e->stringtab[j].string) ||
-					memcmp(lwc_string_data(p),
-						e->stringtab[j].string,
-						lwc_string_length(p)) != 0) {
-					printf("FAIL Strings differ\n"
-					       "    Got string '%.*s'. "
-					       "Expected '%s'\n",
-						(int) lwc_string_length(p),
-						lwc_string_data(p),
-						e->stringtab[j].string);
-					return true;
-				}
+                if (lwc_string_length(p) !=
+                    strlen(e->stringtab[j].string) ||
+                    memcmp(lwc_string_data(p),
+                           e->stringtab[j].string,
+                           lwc_string_length(p)) != 0) {
+                    printf("FAIL Strings differ\n"
+                           "    Got string '%.*s'. "
+                           "Expected '%s'\n",
+                           (int) lwc_string_length(p),
+                           lwc_string_data(p),
+                           e->stringtab[j].string);
+                    return true;
+                }
 
 				i += sizeof (css_code_t) - 1;
 			} else if (((uint8_t *) s->style->bytecode)[i] !=
@@ -572,214 +643,217 @@ bool validate_rule_selector(css_rule_selector *s, exp_entry *e)
 
 void validate_rule_charset(css_rule_charset *s, exp_entry *e, int testnum)
 {
-	char name[MAX_RULE_NAME_LEN];
-	char *ptr = name;
+    char name[MAX_RULE_NAME_LEN];
+    char *ptr = name;
 
-	dump_string(s->encoding, &ptr);
-	*ptr = '\0';
+    dump_string(s->encoding, &ptr);
+    *ptr = '\0';
 
-	if (strcmp(name, e->name) != 0) {
-		printf("%d: Got charset '%s'. Expected '%s'\n",
-			testnum, name, e->name);
-		assert(0 && "Mismatched charsets");
-	}
+    printf("DEBUG: Validating charset: got='%s', expected='%s'\n", name, e->name);
+    if (strcmp(name, e->name) != 0) {
+        printf("%d: Got charset '%s'. Expected '%s'\n",
+               testnum, name, e->name);
+        assert(0 && "Mismatched charsets");
+    }
 }
 
 void validate_rule_import(css_rule_import *s, exp_entry *e, int testnum)
 {
-	if (strncmp(lwc_string_data(s->url), e->name,
-		    lwc_string_length(s->url)) != 0) {
-		printf("%d: Got URL '%.*s'. Expected '%s'\n",
-			testnum, (int) lwc_string_length(s->url),
-			lwc_string_data(s->url),
-		e->name);
-		assert(0 && "Mismatched URLs");
-	}
+    printf("DEBUG: Validating import: got='%.*s', expected='%s'\n",
+           (int) lwc_string_length(s->url), lwc_string_data(s->url), e->name);
+    if (strncmp(lwc_string_data(s->url), e->name,
+                lwc_string_length(s->url)) != 0) {
+        printf("%d: Got URL '%.*s'. Expected '%s'\n",
+               testnum, (int) lwc_string_length(s->url),
+               lwc_string_data(s->url),
+               e->name);
+        assert(0 && "Mismatched URLs");
+    }
 
-	css_stylesheet_destroy(s->sheet);
+    css_stylesheet_destroy(s->sheet);
 }
 
 void dump_selector_list(css_selector *list, char **ptr)
 {
-	if (list->combinator != NULL) {
-		dump_selector_list(list->combinator, ptr);
-	}
+    if (list->combinator != NULL) {
+        dump_selector_list(list->combinator, ptr);
+    }
 
-	switch (list->data.comb) {
-	case CSS_COMBINATOR_NONE:
-		break;
-	case CSS_COMBINATOR_ANCESTOR:
-		(*ptr)[0] = ' ';
-		*ptr += 1;
-		break;
-	case CSS_COMBINATOR_PARENT:
-		memcpy(*ptr, " > ", 3);
-		*ptr += 3;
-		break;
-	case CSS_COMBINATOR_SIBLING:
-		memcpy(*ptr, " + ", 3);
-		*ptr += 3;
-		break;
-	case CSS_COMBINATOR_GENERIC_SIBLING:
-		memcpy(*ptr, " ~ ", 3);
-		*ptr += 3;
-		break;
-	}
+    switch (list->data.comb) {
+    case CSS_COMBINATOR_NONE:
+        break;
+    case CSS_COMBINATOR_ANCESTOR:
+        (*ptr)[0] = ' ';
+        *ptr += 1;
+        break;
+    case CSS_COMBINATOR_PARENT:
+        memcpy(*ptr, " > ", 3);
+        *ptr += 3;
+        break;
+    case CSS_COMBINATOR_SIBLING:
+        memcpy(*ptr, " + ", 3);
+        *ptr += 3;
+        break;
+    case CSS_COMBINATOR_GENERIC_SIBLING:
+        memcpy(*ptr, " ~ ", 3);
+        *ptr += 3;
+        break;
+    }
 
-	dump_selector(list, ptr);
+    dump_selector(list, ptr);
 }
 
 void dump_selector(css_selector *selector, char **ptr)
 {
-	css_selector_detail *d = &selector->data;
+    css_selector_detail *d = &selector->data;
 
-	while (true) {
-		dump_selector_detail(d, ptr);
+    while (true) {
+        dump_selector_detail(d, ptr);
 
-		if (d->next == 0)
-			break;
+        if (d->next == 0)
+            break;
 
-		d++;
-	}
+        d++;
+    }
 }
 
 void dump_selector_detail(css_selector_detail *detail, char **ptr)
 {
-	if (detail->negate)
-		*ptr += sprintf(*ptr, ":not(");
+    if (detail->negate)
+        *ptr += sprintf(*ptr, ":not(");
 
-	switch (detail->type) {
-	case CSS_SELECTOR_ELEMENT:
-                if (lwc_string_length(detail->qname.name) == 1 &&
-                    lwc_string_data(detail->qname.name)[0] == '*' &&
-				detail->next == 0) {
-			dump_string(detail->qname.name, ptr);
-		} else if (lwc_string_length(detail->qname.name) != 1 ||
-                           lwc_string_data(detail->qname.name)[0] != '*') {
-			dump_string(detail->qname.name, ptr);
-		}
-		break;
-	case CSS_SELECTOR_CLASS:
-		**ptr = '.';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		break;
-	case CSS_SELECTOR_ID:
-		**ptr = '#';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		break;
-	case CSS_SELECTOR_PSEUDO_CLASS:
-	case CSS_SELECTOR_PSEUDO_ELEMENT:
-		**ptr = ':';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		if (detail->value_type == CSS_SELECTOR_DETAIL_VALUE_STRING) {
-			if (detail->value.string != NULL) {
-				**ptr = '(';
-				*ptr += 1;
-				dump_string(detail->value.string, ptr);
-				**ptr = ')';
-				*ptr += 1;
-			}
-		} else {
-			*ptr += sprintf(*ptr, "(%dn+%d)",
-					detail->value.nth.a,
-					detail->value.nth.b);
-		}
-		break;
-	case CSS_SELECTOR_ATTRIBUTE:
-		**ptr = '[';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		**ptr = ']';
-		*ptr += 1;
-		break;
-	case CSS_SELECTOR_ATTRIBUTE_EQUAL:
-		**ptr = '[';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		(*ptr)[0] = '=';
-		(*ptr)[1] = '"';
-		*ptr += 2;
-		dump_string(detail->value.string, ptr);
-		(*ptr)[0] = '"';
-		(*ptr)[1] = ']';
-		*ptr += 2;
-		break;
-	case CSS_SELECTOR_ATTRIBUTE_DASHMATCH:
-		**ptr = '[';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		(*ptr)[0] = '|';
-		(*ptr)[1] = '=';
-		(*ptr)[2] = '"';
-		*ptr += 3;
-		dump_string(detail->value.string, ptr);
-		(*ptr)[0] = '"';
-		(*ptr)[1] = ']';
-		*ptr += 2;
-		break;
-	case CSS_SELECTOR_ATTRIBUTE_INCLUDES:
-		**ptr = '[';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		(*ptr)[0] = '~';
-		(*ptr)[1] = '=';
-		(*ptr)[2] = '"';
-		*ptr += 3;
-		dump_string(detail->value.string, ptr);
-		(*ptr)[0] = '"';
-		(*ptr)[1] = ']';
-		*ptr += 2;
-		break;
-	case CSS_SELECTOR_ATTRIBUTE_PREFIX:
-		**ptr = '[';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		(*ptr)[0] = '^';
-		(*ptr)[1] = '=';
-		(*ptr)[2] = '"';
-		*ptr += 3;
-		dump_string(detail->value.string, ptr);
-		(*ptr)[0] = '"';
-		(*ptr)[1] = ']';
-		*ptr += 2;
-		break;
-	case CSS_SELECTOR_ATTRIBUTE_SUFFIX:
-		**ptr = '[';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		(*ptr)[0] = '$';
-		(*ptr)[1] = '=';
-		(*ptr)[2] = '"';
-		*ptr += 3;
-		dump_string(detail->value.string, ptr);
-		(*ptr)[0] = '"';
-		(*ptr)[1] = ']';
-		*ptr += 2;
-		break;
-	case CSS_SELECTOR_ATTRIBUTE_SUBSTRING:
-		**ptr = '[';
-		*ptr += 1;
-		dump_string(detail->qname.name, ptr);
-		(*ptr)[0] = '*';
-		(*ptr)[1] = '=';
-		(*ptr)[2] = '"';
-		*ptr += 3;
-		dump_string(detail->value.string, ptr);
-		(*ptr)[0] = '"';
-		(*ptr)[1] = ']';
-		*ptr += 2;
-		break;
-	}
+    switch (detail->type) {
+    case CSS_SELECTOR_ELEMENT:
+        if (lwc_string_length(detail->qname.name) == 1 &&
+            lwc_string_data(detail->qname.name)[0] == '*' &&
+            detail->next == 0) {
+            dump_string(detail->qname.name, ptr);
+        } else if (lwc_string_length(detail->qname.name) != 1 ||
+                   lwc_string_data(detail->qname.name)[0] != '*') {
+            dump_string(detail->qname.name, ptr);
+        }
+        break;
+    case CSS_SELECTOR_CLASS:
+        **ptr = '.';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        break;
+    case CSS_SELECTOR_ID:
+        **ptr = '#';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        break;
+    case CSS_SELECTOR_PSEUDO_CLASS:
+    case CSS_SELECTOR_PSEUDO_ELEMENT:
+        **ptr = ':';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        if (detail->value_type == CSS_SELECTOR_DETAIL_VALUE_STRING) {
+            if (detail->value.string != NULL) {
+                **ptr = '(';
+                *ptr += 1;
+                dump_string(detail->value.string, ptr);
+                **ptr = ')';
+                *ptr += 1;
+            }
+        } else {
+            *ptr += sprintf(*ptr, "(%dn+%d)",
+                    detail->value.nth.a,
+                    detail->value.nth.b);
+        }
+        break;
+    case CSS_SELECTOR_ATTRIBUTE:
+        **ptr = '[';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        **ptr = ']';
+        *ptr += 1;
+        break;
+    case CSS_SELECTOR_ATTRIBUTE_EQUAL:
+        **ptr = '[';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        (*ptr)[0] = '=';
+        (*ptr)[1] = '"';
+        *ptr += 2;
+        dump_string(detail->value.string, ptr);
+        (*ptr)[0] = '"';
+        (*ptr)[1] = ']';
+        *ptr += 2;
+        break;
+    case CSS_SELECTOR_ATTRIBUTE_DASHMATCH:
+        **ptr = '[';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        (*ptr)[0] = '|';
+        (*ptr)[1] = '=';
+        (*ptr)[2] = '"';
+        *ptr += 3;
+        dump_string(detail->value.string, ptr);
+        (*ptr)[0] = '"';
+        (*ptr)[1] = ']';
+        *ptr += 2;
+        break;
+    case CSS_SELECTOR_ATTRIBUTE_INCLUDES:
+        **ptr = '[';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        (*ptr)[0] = '~';
+        (*ptr)[1] = '=';
+        (*ptr)[2] = '"';
+        *ptr += 3;
+        dump_string(detail->value.string, ptr);
+        (*ptr)[0] = '"';
+        (*ptr)[1] = ']';
+        *ptr += 2;
+        break;
+    case CSS_SELECTOR_ATTRIBUTE_PREFIX:
+        **ptr = '[';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        (*ptr)[0] = '^';
+        (*ptr)[1] = '=';
+        (*ptr)[2] = '"';
+        *ptr += 3;
+        dump_string(detail->value.string, ptr);
+        (*ptr)[0] = '"';
+        (*ptr)[1] = ']';
+        *ptr += 2;
+        break;
+    case CSS_SELECTOR_ATTRIBUTE_SUFFIX:
+        **ptr = '[';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        (*ptr)[0] = '$';
+        (*ptr)[1] = '=';
+        (*ptr)[2] = '"';
+        *ptr += 3;
+        dump_string(detail->value.string, ptr);
+        (*ptr)[0] = '"';
+        (*ptr)[1] = ']';
+        *ptr += 2;
+        break;
+    case CSS_SELECTOR_ATTRIBUTE_SUBSTRING:
+        **ptr = '[';
+        *ptr += 1;
+        dump_string(detail->qname.name, ptr);
+        (*ptr)[0] = '*';
+        (*ptr)[1] = '=';
+        (*ptr)[2] = '"';
+        *ptr += 3;
+        dump_string(detail->value.string, ptr);
+        (*ptr)[0] = '"';
+        (*ptr)[1] = ']';
+        *ptr += 2;
+        break;
+    }
 
-	if (detail->negate)
-		*ptr += sprintf(*ptr, ")");
+    if (detail->negate)
+        *ptr += sprintf(*ptr, ")");
 }
 
 void dump_string(lwc_string *string, char **ptr)
 {
-	*ptr += sprintf(*ptr, "%.*s", (int) lwc_string_length(string),
-			lwc_string_data(string));
+    *ptr += sprintf(*ptr, "%.*s", (int) lwc_string_length(string),
+            lwc_string_data(string));
 }
