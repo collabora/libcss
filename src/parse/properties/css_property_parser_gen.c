@@ -549,58 +549,50 @@ int main(int argc, char **argv)
 	bool only_ident = true; /* if the only token type is ident */
 	bool is_generic = false;
 
-	struct keyval_list base;
-	struct keyval_list IDENT;
-	struct keyval_list IDENT_LIST;
-	struct keyval_list LENGTH_UNIT;
-	struct keyval_list URI;
-	struct keyval_list WRAP;
-	struct keyval_list NUMBER;
-	struct keyval_list COLOR;
-	struct keyval_list CALC;
-
+	struct keyval_list base = {0};
+	struct keyval_list IDENT = {0};
+	struct keyval_list IDENT_LIST = {0};
+	struct keyval_list LENGTH_UNIT = {0};
+	struct keyval_list URI = {0};
+	struct keyval_list WRAP = {0};
+	struct keyval_list NUMBER = {0};
+	struct keyval_list COLOR = {0};
+	struct keyval_list CALC = {0};
 
 	if (argc < 2) {
-		fprintf(stderr,"Usage: %s [-o <filename>] <descriptor>\n", argv[0]);
+		fprintf(stderr, "Usage: %s [-o <filename>] <descriptor>\n", argv[0]);
 		return 1;
 	}
 
 	if ((argv[1][0] == '-') && (argv[1][1] == 'o')) {
 		if (argc != 4) {
-			fprintf(stderr,"Usage: %s [-o <filename>] <descriptor>\n", argv[0]);
+			fprintf(stderr, "Usage: %s [-o <filename>] <descriptor>\n", argv[0]);
 			return 1;
 		}
 		outputf = fopen(argv[2], "w");
 		if (outputf == NULL) {
 			perror("unable to open file");
-			return 2; /* exit on output file output error */
+			return 2;
 		}
 		descriptor = strdup(argv[3]);
 	} else {
 		outputf = stdout;
 		descriptor = strdup(argv[1]);
 	}
+	if (!descriptor) {
+		if (outputf != stdout) fclose(outputf);
+		return 2;
+	}
 	curpos = descriptor;
-
-	base.count = 0;
-	IDENT.count = 0;
-	URI.count = 0;
-	WRAP.count = 0;
-	NUMBER.count = 0;
-	COLOR.count = 0;
-	LENGTH_UNIT.count = 0;
-	IDENT_LIST.count = 0;
-	CALC.count = 0;
 
 	curlist = &base;
 
 	while (*curpos != 0) {
 		rkv = get_keyval(&curpos);
 		if (rkv == NULL) {
-			fprintf(stderr,"Token error at offset %ld\n",
+			fprintf(stderr, "Token error at offset %ld\n",
 					(long)(curpos - descriptor));
-			fclose(outputf);
-			return 2;
+			goto cleanup;
 		}
 
 		if (strcmp(rkv->key, "WRAP") == 0) {
@@ -609,8 +601,10 @@ int main(int argc, char **argv)
 		} else if (curlist == &base && strcmp(rkv->key, "NUMBER") == 0) {
 			if (rkv->val[0] == '(') {
 				curlist = &NUMBER;
+				free(rkv); /* Free opening parenthesis */
 			} else if (rkv->val[0] == ')') {
 				curlist = &base;
+				free(rkv); /* Free closing parenthesis */
 			} else {
 				NUMBER.item[NUMBER.count++] = rkv;
 			}
@@ -618,36 +612,50 @@ int main(int argc, char **argv)
 		} else if (strcmp(rkv->key, "IDENT") == 0) {
 			if (rkv->val[0] == '(') {
 				curlist = &IDENT;
+				free(rkv); /* Free opening parenthesis */
 			} else if (rkv->val[0] == ')') {
 				curlist = &base;
+				free(rkv); /* Free closing parenthesis */
 			} else if (strcmp(rkv->val, str_INHERIT) == 0) {
 				IDENT.item[IDENT.count++] = &ident_inherit;
+				free(rkv); /* Free rkv, use static */
 			} else if (strcmp(rkv->val, str_INITIAL) == 0) {
 				IDENT.item[IDENT.count++] = &ident_initial;
+				free(rkv); /* Free rkv, use static */
 			} else if (strcmp(rkv->val, str_REVERT) == 0) {
 				IDENT.item[IDENT.count++] = &ident_revert;
+				free(rkv); /* Free rkv, use static */
 			} else if (strcmp(rkv->val, str_UNSET) == 0) {
 				IDENT.item[IDENT.count++] = &ident_unset;
+				free(rkv); /* Free rkv, use static */
+			} else {
+				IDENT.item[IDENT.count++] = rkv;
 			}
 		} else if (strcmp(rkv->key, "IDENT_LIST") == 0) {
 			if (rkv->val[0] == '(') {
 				curlist = &IDENT_LIST;
+				free(rkv); /* Free opening parenthesis */
 			} else if (rkv->val[0] == ')') {
 				curlist = &base;
+				free(rkv); /* Free closing parenthesis */
 			}
 		} else if (strcmp(rkv->key, "LENGTH_UNIT") == 0) {
 			if (rkv->val[0] == '(') {
 				curlist = &LENGTH_UNIT;
+				free(rkv); /* Free opening parenthesis */
 			} else if (rkv->val[0] == ')') {
 				curlist = &base;
+				free(rkv); /* Free closing parenthesis */
 			}
 			only_ident = false;
 			do_token_check = false;
 		} else if (strcmp(rkv->key, "CALC") == 0) {
 			if (rkv->val[0] == '(') {
 				curlist = &CALC;
+				free(rkv); /* Free opening parenthesis */
 			} else if (rkv->val[0] == ')') {
 				curlist = &base;
+				free(rkv); /* Free closing parenthesis */
 			}
 			only_ident = false;
 			do_token_check = false;
@@ -660,6 +668,7 @@ int main(int argc, char **argv)
 			only_ident = false;
 		} else if (strcmp(rkv->key, "GENERIC") == 0) {
 			is_generic = true;
+			free(rkv); /* Free GENERIC token */
 		} else {
 			/* just append to current list */
 			curlist->item[curlist->count++] = rkv;
@@ -667,11 +676,9 @@ int main(int argc, char **argv)
 	}
 
 	if (base.count != 1) {
-		fprintf(stderr,"Incorrect base element count (got %d expected 1)\n", base.count);
-		fclose(outputf);
-		return 3;
+		fprintf(stderr, "Incorrect base element count (got %d expected 1)\n", base.count);
+		goto cleanup;
 	}
-
 
 	/* header */
 	output_header(outputf, descriptor, base.item[0], is_generic);
@@ -680,7 +687,7 @@ int main(int argc, char **argv)
 		output_wrap(outputf, base.item[0], &WRAP);
 	} else {
 		/* check token type is correct */
-		output_token_type_check(outputf, do_token_check,  &IDENT, &URI, &NUMBER);
+		output_token_type_check(outputf, do_token_check, &IDENT, &URI, &NUMBER);
 
 		if (IDENT.count > 0)
 			output_ident(outputf, only_ident, base.item[0], &IDENT);
@@ -707,10 +714,28 @@ int main(int argc, char **argv)
 		}
 
 		output_footer(outputf);
-
 	}
 
-	fclose(outputf);
+cleanup:
+	/* Cleanup allocated keyvals */
+	for (int i = 0; i < base.count; i++) {
+		free(base.item[i]);
+	}
+	for (int i = 0; i < IDENT.count; i++) {
+		if (IDENT.item[i] != &ident_inherit && IDENT.item[i] != &ident_initial &&
+		    IDENT.item[i] != &ident_revert && IDENT.item[i] != &ident_unset) {
+			free(IDENT.item[i]);
+		}
+	}
+	for (int i = 0; i < URI.count; i++) free(URI.item[i]);
+	for (int i = 0; i < WRAP.count; i++) free(WRAP.item[i]);
+	for (int i = 0; i < NUMBER.count; i++) free(NUMBER.item[i]);
+	for (int i = 0; i < COLOR.count; i++) free(COLOR.item[i]);
+	for (int i = 0; i < LENGTH_UNIT.count; i++) free(LENGTH_UNIT.item[i]);
+	for (int i = 0; i < IDENT_LIST.count; i++) free(IDENT_LIST.item[i]);
+	for (int i = 0; i < CALC.count; i++) free(CALC.item[i]);
+	free(descriptor);
+	if (outputf != stdout) fclose(outputf);
 
 	return 0;
 }
