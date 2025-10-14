@@ -9,6 +9,10 @@
 #define libcss_computed_h_
 
 #ifdef __cplusplus
+#define restrict
+#endif
+
+#ifdef __cplusplus
 extern "C"
 {
 #endif
