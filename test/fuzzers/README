@@ -1,0 +1,16 @@
+LibCSS Fuzzer
+This directory contains fuzzers for the libcss-based CSS parser, designed for OSS-Fuzz integration.
+Files
+
+css_parse_fuzzer.cc: Fuzzer targeting CSS parsing logic.
+build_google_oss_fuzzers.sh: Builds the fuzzer for OSS-Fuzz.
+build_seed_corpus.sh: Creates a seed corpus for the fuzzer.
+fuzzingengine.c: Standalone fuzzing engine for local testing.
+GNUmakefile: Makefile for building fuzzers locally.
+failing_fuzzers.txt: Tracks failing fuzzers (if any).
+
+Usage
+
+Build fuzzers: ./build_google_oss_fuzzers.sh
+Build seed corpus: ./build_seed_corpus.sh
+Test locally: Use fuzzingengine.c to run the fuzzer with a test file.
