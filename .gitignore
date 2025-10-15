@@ -1,4 +1,5 @@
 build*
+.cache/
 libwapcaplet/
 libparserutils/
 Makefile.config.override
