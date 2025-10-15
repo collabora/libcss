@@ -1,4 +1,6 @@
 build*
+libwapcaplet/
+libparserutils/
 Makefile.config.override
 *~
 docs/html
