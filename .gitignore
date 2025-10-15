@@ -1,4 +1,4 @@
-build-*
+build*
 Makefile.config.override
 *~
 docs/html
