@@ -1,0 +1,4 @@
+[wrap-git]
+directory=libparserutils
+url=https://gitlab.collabora.com/libcss/libparserutils.git
+revision=meson

@@ -1,0 +1,4 @@
+[wrap-git]
+directory=libwapcaplet
+url=https://gitlab.collabora.com/libcss/libwapcaplet.git
+revision=meson

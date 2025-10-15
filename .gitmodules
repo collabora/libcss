@@ -1,8 +1,0 @@
-[submodule "subprojects/libwapcaplet"]
-	path = subprojects/libwapcaplet
-	url = https://gitlab.collabora.com/libcss/libwapcaplet.git
-	branch = meson
-[submodule "subprojects/libparserutils"]
-	path = subprojects/libparserutils
-	url = https://gitlab.collabora.com/libcss/libparserutils.git
-	branch = meson
