@@ -14,3 +14,11 @@ Usage
 Build fuzzers: ./build_google_oss_fuzzers.sh
 Build seed corpus: ./build_seed_corpus.sh
 Test locally: Use fuzzingengine.c to run the fuzzer with a test file.
+
+
+Build and run Locally
+
+```
+python ../oss-fuzz/infra/helper.py build_fuzzers --external . --sanitizer address
+python ../oss-fuzz/infra/helper.py run_fuzzer --external . css_parse_fuzzer -- -verbosity=3 -print_final_stats=1
+python ../oss-fuzz/infra/helper.py run_fuzzer --external . --sanitizer address css_parse_fuzzer -- -verbosity=3 -print_final_stats=1 -max_total_time=6000
