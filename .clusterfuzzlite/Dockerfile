@@ -22,9 +22,6 @@ RUN pip3 install meson
 # Copy your entire local libcss repo (with branch changes) into the container
 COPY . $SRC/libcss
 
-# Clone libcss-tests only if it's not already in your local repo (remove this line if you have it locally)
-RUN git clone --depth 1 https://gitlab.collabora.com/libcss/libcss-tests.git $SRC/libcss-tests
-
 # Set working dir
 WORKDIR $SRC/libcss
 
