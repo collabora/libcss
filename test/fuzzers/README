@@ -23,3 +23,12 @@ python ../oss-fuzz/infra/helper.py build_fuzzers --external . --sanitizer addres
 python ../oss-fuzz/infra/helper.py run_fuzzer --external . css_parse_fuzzer -- -verbosity=3 -print_final_stats=1
 python ../oss-fuzz/infra/helper.py run_fuzzer --external . --sanitizer address css_parse_fuzzer -- -verbosity=3 -print_final_stats=1 -max_total_time=6000
 ```
+
+
+Repro (on crash file crash-c4825edc46a285de7bbcc52e0065d1e743ddd467)
+
+```
+python ../oss-fuzz/infra/helper.py shell --external . --sanitizer address
+/out/css_parse_fuzzer -verbosity=3 -print_final_stats=1 /out/crash-c4825edc46a285de7bbcc52e0065d1e743ddd467
+
+```
