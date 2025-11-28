@@ -56,19 +56,16 @@ This project can also be built with [meson](https://github.com/mesonbuild/meson)
 `pip install meson`
 
 2. Set up meson build
-(optionally set install path, otherwise remove -prefix)
-(optionally enable tests)
 
 ```
 export PREFIX=PATH/TO/INSTALL/DIRECTORY
-meson setup builddir --prefix=$PREFIX -Dtests=true
+meson setup builddir --prefix=$PREFIX
 ```
 
-3. Compile and optionally run tests
+3. Compile
 
 ```
 meson compile  -C builddir -v
-meson test -C builddir -v
 ```
 
 4. Install
