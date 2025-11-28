@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <libcss/libcss.h>
 
-// Simplified parser struct (based on GstCssParse)
+// Simplified parser struct
 struct CssParser {
   css_stylesheet *stylesheet;
   css_select_ctx *select_ctx;
@@ -33,7 +33,7 @@ static css_error resolve_font(void *pw, lwc_string *name, css_system_font *syste
   return CSS_INVALID;
 }
 
-// Minimal select handler (based on gstcssparse.c)
+// Minimal select handler
 static css_error node_name(void *pw, void *node, css_qname *qname) {
   lwc_string *node_name = (lwc_string *)node;
   qname->name = lwc_string_ref(node_name);
@@ -240,7 +240,7 @@ static void free_parser(CssParser *parser) {
   if (parser->font_family) lwc_string_unref(parser->font_family);
 }
 
-// Parse CSS (adapted from gst_cssparse_parse)
+// Parse CSS
 static css_error parse_css(CssParser *parser, const char *css_data) {
   if (!parser->stylesheet || !parser->select_ctx) return CSS_INVALID;
   if (!css_data || !css_data[0]) return CSS_OK;
