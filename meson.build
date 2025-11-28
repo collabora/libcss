@@ -1,4 +1,4 @@
-project('libcss', 'c',
+project('libcss', ['c', 'cpp'],
   version: '0.9.2',
   default_options: ['c_std=c99', 'warning_level=2'])
 
@@ -395,4 +395,22 @@ if get_option('tests')
       )
     endif
   endforeach
+endif
+
+
+# Fuzzing option (enable with -Dfuzzing=true)
+if get_option('fuzzing')
+  # Assume Clang is used for libFuzzer
+  fuzz_c_args = ['-fsanitize=fuzzer,address,undefined', '-fno-omit-frame-pointer', '-g', '-O1']
+  fuzz_link_args = ['-fsanitize=fuzzer,address,undefined']
+
+  executable('css_parse_fuzzer',
+    sources: 'test/fuzzers/css_parse_fuzzer.cc',
+    include_directories: inc,
+    c_args: [cflags, fuzz_c_args],
+    link_args: fuzz_link_args,
+    dependencies: [parserutils_dep, wapcaplet_dep],
+    link_with: libcss_lib,
+    install: false
+  )
 endif
