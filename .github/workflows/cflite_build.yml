@@ -1,0 +1,25 @@
+name: ClusterFuzzLite continuous builds
+on:
+  push:
+    branches:
+      - meson  # Or your default branch
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.sanitizer }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer:
+          - address
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Fuzzers (${{ matrix.sanitizer }})
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@v1
+        with:
+          language: c
+          sanitizer: ${{ matrix.sanitizer }}
+          upload-build: true
